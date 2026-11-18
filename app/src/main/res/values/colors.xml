@@ -2,4 +2,27 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Banking App Brand & Surface Colors -->
+    <color name="bank_primary">#1A237E</color>
+    <color name="bank_primary_dark">#0D1454</color>
+    <color name="bank_accent">#6A1B9A</color>
+    <color name="bank_teal">#00695C</color>
+    <color name="bank_bg">#F4F6FA</color>
+    <color name="bank_card_bg">#FFFFFF</color>
+    <color name="bank_text_primary">#1C2434</color>
+    <color name="bank_text_secondary">#5A677D</color>
+    <color name="bank_divider">#E2E8F0</color>
+
+    <!-- Status Colors -->
+    <color name="status_success_bg">#E8F5E9</color>
+    <color name="status_success_text">#1B5E20</color>
+    <color name="status_warning_bg">#FFF8E1</color>
+    <color name="status_warning_text">#E65100</color>
+    <color name="status_error_bg">#FFEBEE</color>
+    <color name="status_error_text">#B71C1C</color>
+    <color name="status_purple_bg">#F3E5F5</color>
+    <color name="status_purple_text">#6A1B9A</color>
+    <color name="status_info_bg">#E3F2FD</color>
+    <color name="status_info_text">#0D47A1</color>
 </resources>

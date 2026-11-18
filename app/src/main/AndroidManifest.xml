@@ -20,6 +20,30 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".features.security.EkycActivity"
+            android:exported="false" />
+        <activity
+            android:name=".features.security.OfficerEkycReviewActivity"
+            android:exported="false" />
+        <activity
+            android:name=".features.security.AuditLogActivity"
+            android:exported="false" />
+        <activity
+            android:name=".features.transactions.DepositWithdrawActivity"
+            android:exported="false" />
+        <activity
+            android:name=".features.transactions.TransferActivity"
+            android:exported="false" />
+        <activity
+            android:name=".features.transactions.TransactionConfirmActivity"
+            android:exported="false" />
+        <activity
+            android:name=".features.transactions.TransactionResultActivity"
+            android:exported="false" />
+        <activity
+            android:name=".features.transactions.TransactionHistoryActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

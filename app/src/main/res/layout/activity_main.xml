@@ -1,19 +1,355 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:background="@color/bank_bg"
+    android:orientation="vertical">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <!-- Top Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:background="@color/bank_primary"
+        android:orientation="vertical"
+        android:padding="18dp">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BankingApp — Member 2 Hub"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Security &amp; Transaction Management (Req 2 + 4 • Mock Mode)"
+            android:textColor="#D0D8FF"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Current User & eKYC Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card_rounded"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvCustomerName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Khách hàng: Nguyễn Văn An"
+                            android:textColor="@color/bank_text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvCustomerId"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="ID: user_cust_01 • Ngưỡng Sinh trắc học: 10,000,000 VNĐ"
+                            android:textColor="@color/bank_text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvEkycBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_warning"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="5dp"
+                        android:text="eKYC: PENDING"
+                        android:textColor="@color/status_warning_text"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="10dp"
+                    android:background="@color/bank_divider" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Số dư tài khoản Demo (cập nhật thời gian thực):"
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvCheckingBalance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="• Checking (1001000123456): 50,000,000 VNĐ"
+                    android:textColor="@color/bank_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSavingBalance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="• Saving (1002000654321): 120,000,000 VNĐ"
+                    android:textColor="@color/bank_teal"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvReceiverBalance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="• TK Nhận Mẫu - Trần Thị Bình (1001000999888): 15,000,000 VNĐ"
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tvFrozenBalance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="• TK Bị Khóa Demo (1001000444555): 5,000,000 VNĐ [FROZEN]"
+                    android:textColor="@color/status_error_text"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp"
+                android:text="CHỨC NĂNG GIAO DỊCH (REQUIREMENT 4)"
+                android:textColor="@color/bank_text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <!-- Card 1: Deposit / Withdraw -->
+            <LinearLayout
+                android:id="@+id/cardDepositWithdraw"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1. Nạp tiền &amp; Rút tiền (Deposit / Withdraw)"
+                    android:textColor="@color/bank_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Hỗ trợ cổng thanh toán Sandbox (VNPay/MoMo/Napas test), kiểm tra số dư, OTP 2FA &amp; Biometric."
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 2: Transfer -->
+            <LinearLayout
+                android:id="@+id/cardTransfer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_card_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2. Chuyển tiền Nội bộ &amp; Liên ngân hàng (Transfer)"
+                    android:textColor="@color/bank_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Kiểm tra Validation toàn diện, chuyển cùng ngân hàng hoặc mô phỏng ngân hàng ngoài (VCB, MB, TCB...)."
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 5: History -->
+            <LinearLayout
+                android:id="@+id/cardHistory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_card_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="3. Lịch sử Giao dịch &amp; Hoàn tiền (Transaction History)"
+                    android:textColor="@color/bank_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Xem danh sách giao dịch theo tài khoản/trạng thái, chi tiết xác thực OTP/Biometric &amp; test Refund."
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="8dp"
+                android:text="CHỨC NĂNG BẢO MẬT &amp; ĐỊNH DANH (REQUIREMENT 2)"
+                android:textColor="@color/bank_text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <!-- Card 3: Customer eKYC -->
+            <LinearLayout
+                android:id="@+id/cardCustomerEkyc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="4. Xác thực Định danh eKYC (Customer eKYC)"
+                    android:textColor="@color/bank_accent"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Nhập CCCD, chụp Camera hoặc chọn ảnh giấy tờ &amp; khuôn mặt, gửi hồ sơ với trạng thái Pending."
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 4: Officer eKYC Review -->
+            <LinearLayout
+                android:id="@+id/cardOfficerReview"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_card_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="5. Bank Officer: Duyệt hồ sơ eKYC (Officer Review)"
+                    android:textColor="@color/bank_accent"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Mô phỏng cán bộ ngân hàng xem hồ sơ eKYC, bấm Duyệt (Approved) hoặc Từ chối (Rejected) kèm lý do."
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Card 6: Audit Logs -->
+            <LinearLayout
+                android:id="@+id/cardAuditLogs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_card_rounded"
+                android:clickable="true"
+                android:focusable="true"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="6. Nhật ký Bảo mật (Security Audit Logs)"
+                    android:textColor="@color/bank_accent"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Theo dõi mọi sự kiện eKYC, OTP, Biometric, Giao dịch. Tự động che giấu (REDACTED) OTP/password/secret."
+                    android:textColor="@color/bank_text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnResetDemo"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="12dp"
+                android:text="Khôi phục dữ liệu mẫu (Reset Demo)"
+                android:textColor="@color/bank_primary" />
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
