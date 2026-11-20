@@ -1,0 +1,239 @@
+openapi: 3.0.3
+info:
+  title: Banking App - AI Chatbot API
+  version: 1.0.0
+  description: |
+    API cho chức năng Trợ lý ảo thông minh (AI Chatbot):
+    - Tiếp nhận câu hỏi bằng ngôn ngữ tự nhiên (Text, Voice Speech-to-Text, Suggestion Chips).
+    - Tích hợp lớp lọc bảo mật chống Prompt Injection & ẩn danh dữ liệu nhạy cảm (PII Masking).
+    - Phân tích Intent & Entities, kiểm tra dữ liệu ngữ cảnh thực tế từ DB (`accounts`, `utility_orders`, `utility_services`, `bank_branches`, `saving_rates`).
+    - Lưu phiên trò chuyện trong `chatbot_sessions`, lịch sử tin nhắn trong `chat_messages` và nhật ký bảo mật trong `security_audit_logs` theo đúng `ERD_new.html`.
+    - Đóng gói phản hồi kèm Lệnh điều hướng Deep Link (`ChatbotAction`: `destination`, `action_deep_link`, `params`) để Android mở đúng màn hình chức năng và tự động điền sẵn (Auto-fill).
+servers:
+  - url: https://api.example.com/v1
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Chatbot
+
+paths:
+  /chatbot/suggestions:
+    get:
+      tags: [Chatbot]
+      summary: Lấy danh sách Suggestion Chips (Gợi ý thao tác nhanh)
+      responses:
+        '200':
+          description: Danh sách gợi ý câu hỏi nhanh
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items: { type: string }
+
+  /chatbot/sessions:
+    post:
+      tags: [Chatbot]
+      summary: Khởi tạo một phiên trò chuyện mới với AI Chatbot (CHAT_SESSIONS)
+      responses:
+        '201':
+          description: Đã tạo phiên chat kèm tin nhắn chào mừng và Suggestion Chips
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  status: { type: string, enum: [ACTIVE, ENDED] }
+                  welcome_message: { $ref: '#/components/schemas/ChatMessage' }
+                  suggestions:
+                    type: array
+                    items: { type: string }
+    get:
+      tags: [Chatbot]
+      summary: Danh sách các phiên trò chuyện của người dùng
+      responses:
+        '200':
+          description: Danh sách phiên chat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ChatSession' }
+                  total: { type: integer }
+
+  /chatbot/sessions/{session_id}/messages:
+    get:
+      tags: [Chatbot]
+      summary: Lấy lịch sử tin nhắn (CHAT_MESSAGES) của một phiên trò chuyện
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Lịch sử tin nhắn trong phiên
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_id: { type: string }
+                  status: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ChatMessage' }
+                  total: { type: integer }
+    post:
+      tags: [Chatbot]
+      summary: Gửi tin nhắn trong phiên trò chuyện cụ thể
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendChatMessageRequest' }
+      responses:
+        '200':
+          description: Phản hồi từ AI Chatbot kèm lệnh điều hướng Deep Link
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatbotResponse' }
+
+  /chatbot/sessions/{session_id}/end:
+    post:
+      tags: [Chatbot]
+      summary: Kết thúc phiên trò chuyện
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Phiên chat đã chuyển sang trạng thái ENDED
+
+  /chatbot/message:
+    post:
+      tags: [Chatbot]
+      summary: Gửi câu hỏi tới AI Chatbot, nhận câu trả lời và đường dẫn Deep Link điều hướng màn hình (UC-C01)
+      description: |
+        Nếu client chưa truyền `session_id`, Backend tự động khởi tạo phiên mới.
+        Hỗ trợ tất cả các kịch bản:
+        - Thanh toán hóa đơn điện/nước (`Pay_Utility_Bill` -> `app://utilities/bill-payment`)
+        - Nạp tiền điện thoại (`TOPUP_PHONE` -> `app://utilities/mobile-topup`)
+        - Đặt vé máy bay (`Book_Flight` -> `app://booking/flights`)
+        - Đặt vé xem phim CGV (`BOOK_ENTERTAINMENT` -> `app://booking/movies`)
+        - Đặt phòng khách sạn Mường Thanh (`BOOK_ENTERTAINMENT` -> `app://booking/hotel`)
+        - Mua sắm TMĐT Shopee/Lazada/Amazon (`ECOMMERCE_PAYMENT` -> `app://utilities/ecommerce`)
+        - Tìm chi nhánh / ATM gần nhất & chỉ đường (`Find_Nearest_Branch` / `Find_Nearest_ATM` -> `app://navigation/branch-map` / `app://navigation/atm-map`)
+        - Chuyển tiền (`TRANSFER_MONEY` -> `app://banking/transfer`)
+        - Hỏi lãi suất tiết kiệm (`ASK_SAVING_RATE` -> `app://banking/saving/open`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendChatMessageRequest' }
+            examples:
+              payBill:
+                summary: Thanh toán tiền điện
+                value:
+                  message: "Thanh toán tiền điện tháng này giúp tôi"
+                  input_type: "TEXT"
+              transferMoney:
+                summary: Chuyển tiền cho mẹ
+                value:
+                  message: "Cho tôi chuyển 500 cành cho mẹ"
+                  input_type: "VOICE"
+              findNearestBranch:
+                summary: Tìm chi nhánh gần nhất đi xe máy
+                value:
+                  message: "Chi nhánh nào gần đây nhất, tôi đang đi xe máy"
+                  input_type: "TEXT"
+                  user_location:
+                    latitude: 10.776889
+                    longitude: 106.706139
+      responses:
+        '200':
+          description: Phản hồi từ AI Chatbot kèm ChatbotAction
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatbotResponse' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ChatSession:
+      type: object
+      properties:
+        session_id: { type: string }
+        user_id: { type: string }
+        status: { type: string, enum: [ACTIVE, ENDED] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+
+    SendChatMessageRequest:
+      type: object
+      required: [message]
+      properties:
+        session_id: { type: string, nullable: true }
+        message: { type: string, example: "Thanh toán tiền điện tháng này giúp tôi" }
+        input_type: { type: string, enum: [TEXT, VOICE, SUGGESTION_CHIP], default: TEXT }
+        user_location:
+          type: object
+          nullable: true
+          properties:
+            latitude: { type: number, example: 10.776889 }
+            longitude: { type: number, example: 106.706139 }
+
+    ChatbotAction:
+      type: object
+      properties:
+        type: { type: string, enum: [NAVIGATE, NONE], example: NAVIGATE }
+        action_code: { type: string, example: OPEN_BILL_PAYMENT }
+        action_label: { type: string, example: "Thanh toán tiền điện (850.000đ)" }
+        destination: { type: string, example: "app://utilities/bill-payment" }
+        action_deep_link: { type: string, example: "app://banking/utilities/bill?type=ELECTRICITY&billId=b9f1c2d3-0000-0000-0000-000000000001" }
+        params:
+          type: object
+          additionalProperties: true
+
+    ChatMessage:
+      type: object
+      properties:
+        message_id: { type: string }
+        session_id: { type: string }
+        sender: { type: string, enum: [USER, BOT] }
+        input_type: { type: string, enum: [TEXT, VOICE, SUGGESTION_CHIP] }
+        message: { type: string }
+        message_text: { type: string }
+        intent: { type: string, nullable: true }
+        entities: { type: object, additionalProperties: true, nullable: true }
+        action: { $ref: '#/components/schemas/ChatbotAction' }
+        created_at: { type: string, format: date-time }
+
+    ChatbotResponse:
+      type: object
+      properties:
+        session_id: { type: string }
+        message_id: { type: string }
+        sender: { type: string, enum: [BOT] }
+        message: { type: string }
+        message_text: { type: string }
+        intent: { type: string }
+        entities: { type: object, additionalProperties: true }
+        cards:
+          type: array
+          items: { type: object, additionalProperties: true }
+        action: { $ref: '#/components/schemas/ChatbotAction' }
+        suggestions:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }

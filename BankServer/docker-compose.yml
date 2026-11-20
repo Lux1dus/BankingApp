@@ -1,0 +1,35 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+    ports:
+      - "1433:1433"          # Kết nối từ SSMS / Azure Data Studio
+    volumes:
+      - sqldata:/var/opt/mssql
+      - ./relational-database-server:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" || exit 1
+      interval: 10s
+      retries: 10
+
+  api:
+    build: ./backend-server  # Thư mục chứa Dockerfile của back-end
+    env_file:
+      - ./backend-server/.env
+    environment:
+      DB_HOST: db            # Dùng tên service trong mạng Docker
+      DB_USER: sa
+      DB_PASSWORD: "YourStrong!Passw0rd"
+      DB_NAME: BankingApp
+      PORT: 8080
+      JWT_SECRET: "super_secret_bank_key_2026"
+    ports:
+      - "3030:8080"          # Cổng để Android / Frontend gọi vào
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  sqldata:

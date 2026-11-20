@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- App backgrounds & surfaces -->
+    <color name="stage_bg">#FFE6EEEB</color>
+    <color name="app_bg">#FFF3F7F6</color>
+    <color name="header_bg">#F0F3F7F6</color>
+    <color name="sheet_bg">#FFF8FBFA</color>
+    <color name="overlay_dim">#80041916</color>
+
+    <!-- Brand & primary tones -->
+    <color name="brand_dark">#FF073E37</color>
+    <color name="brand_primary">#FF08755F</color>
+    <color name="brand_button">#FF08705C</color>
+    <color name="brand_mint_light">#FF82D5B7</color>
+    <color name="brand_mint_mid">#FF0AA278</color>
+    <color name="brand_mint_deep">#FF07524B</color>
+
+    <!-- Text colors -->
+    <color name="text_primary">#FF143B34</color>
+    <color name="text_heading">#FF26453F</color>
+    <color name="text_body">#FF294740</color>
+    <color name="text_secondary">#FF647773</color>
+    <color name="text_muted">#FF82928F</color>
+    <color name="text_hint">#FF93A19E</color>
+
+    <!-- Borders & dividers -->
+    <color name="border_card">#FFE0E9E6</color>
+    <color name="border_light">#FFEDF2F0</color>
+    <color name="border_nav">#FFDAE5E2</color>
+
+    <!-- Utility tones -->
+    <color name="tone_mint_fg">#FF0B8E6E</color>
+    <color name="tone_mint_bg">#FFE2F5EE</color>
+    <color name="tone_blue_fg">#FF347EA4</color>
+    <color name="tone_blue_bg">#FFE6F2F8</color>
+    <color name="tone_amber_fg">#FFAB7628</color>
+    <color name="tone_amber_bg">#FFFFF0D8</color>
+    <color name="tone_violet_fg">#FF735BA3</color>
+    <color name="tone_violet_bg">#FFEFEBFA</color>
+
+    <!-- Accents -->
+    <color name="notification_coral">#FFEB6E59</color>
+    <color name="fab_active_red">#FFC35F50</color>
+    <color name="income_green">#FF078465</color>
+</resources>

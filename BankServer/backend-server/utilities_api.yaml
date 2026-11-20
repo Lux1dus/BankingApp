@@ -1,0 +1,460 @@
+openapi: 3.0.3
+info:
+  title: Banking App - Utilities API
+  version: 1.0.0
+  description: |
+    API cho mục Utilities: thanh toán hóa đơn (điện EVNHCMC, nước SAWACO), nạp điện thoại (Viettel, VinaPhone, MobiFone) và đặt dịch vụ (vé máy bay Vietnam Airlines/Vietjet Air, vé xem phim CGV, khách sạn Mường Thanh, mua sắm TMĐT Shopee/Lazada/Amazon).
+
+    **Quy ước chung**
+    - Xác thực bằng JWT (Bearer). `user_id` luôn lấy từ token, KHÔNG nhận từ body/query.
+    - Mọi API ghi tiền bắt buộc có header `Idempotency-Key` (UUID) để tránh trừ tiền 2 lần khi app retry.
+    - Hỗ trợ cơ chế Giữ chỗ tạm thời (Seat/Room Hold 15 phút) qua cột `hold_expires_at` trong bảng `utility_orders`, thử thách OTP qua bảng `otp_challenges` và cơ chế Tự động hoàn tiền (`REFUNDED`) trong bảng `transactions` nếu đối tác gặp lỗi sau khi trừ tiền.
+servers:
+  - url: https://api.example.com/v1
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Utilities - Read & Discovery
+  - name: Utilities - Hold & Orders
+  - name: Utilities - Payment (Write)
+
+paths:
+  # ======================= READ & DISCOVERY =======================
+  /utilities/dashboard:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Truy vấn tổng hợp dữ liệu Utilities từ Database (utility_services, utility_orders, unpaid_bills, accounts, user) cho màn hình chính App Bank
+      responses:
+        '200':
+          description: OK
+
+  /utilities/services:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Danh sách toàn bộ Dịch vụ & Đối tác Tiện ích (UTILITY_SERVICES) từ Database
+      parameters:
+        - { name: service_type, in: query, schema: { type: string, enum: [ELECTRICITY, WATER, PHONE_TOPUP, FLIGHT, MOVIE, HOTEL, ECOMMERCE] } }
+        - { name: status, in: query, schema: { type: string, enum: [ACTIVE, MAINTENANCE, SUSPENDED] } }
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Utilities - Read & Discovery]
+      summary: Thêm mới một Dịch vụ & Đối tác Tiện ích vào bảng utility_services trong Database
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_code, service_name]
+              properties:
+                provider_code: { type: string, example: "EVN_HANOI" }
+                service_name: { type: string, example: "Điện lực TP. Hà Nội (EVNHANOI)" }
+                service_type: { type: string, enum: [ELECTRICITY, WATER, PHONE_TOPUP, FLIGHT, MOVIE, HOTEL, ECOMMERCE], default: ELECTRICITY }
+                aggregator_gateway: { type: string, enum: [VNPAY, PAYOO, NAPAS, DIRECT], default: PAYOO }
+                status: { type: string, enum: [ACTIVE, MAINTENANCE, SUSPENDED], default: ACTIVE }
+      responses:
+        '201':
+          description: Đã thêm mới dịch vụ vào bảng utility_services
+
+  /utilities/services/{service_id}:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Truy vấn chi tiết một Dịch vụ Tiện ích (theo service_id hoặc provider_code) kèm danh sách đơn hàng utility_orders của user
+      parameters:
+        - { name: service_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /utilities/saved-context:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Lấy dữ liệu Context đã lưu của người dùng để Auto-fill (Mã KH điện/nước, SĐT nạp, Hành khách, Voucher)
+      responses:
+        '200':
+          description: OK
+
+  /utilities/topup/detect-carrier:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Tự động nhận diện nhà mạng (Viettel, VinaPhone, MobiFone) qua đầu số & trả danh sách mệnh giá cố định (UC-U02)
+      parameters:
+        - { name: phone, in: query, required: true, schema: { type: string, example: "0987654321" } }
+      responses:
+        '200':
+          description: Thông tin nhà mạng và các mệnh giá nạp (10.000đ - 500.000đ)
+        '400':
+          description: Số điện thoại không đúng định dạng
+
+  /utilities/bills:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Danh sách hóa đơn của user hiện tại
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [UNPAID, PAID] } }
+        - { name: bill_type, in: query, schema: { type: string, enum: [ELECTRICITY, WATER, PHONE_TOPUP] } }
+        - { name: page, in: query, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Bill' } }
+                  page: { type: integer }
+                  page_size: { type: integer }
+                  total: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /utilities/bills/lookup:
+    post:
+      tags: [Utilities - Read & Discovery]
+      summary: Tra cứu hóa đơn từ nhà cung cấp (EVNHCMC, SAWACO, Viettel, VinaPhone) (UC-U01 & UC-U02)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bill_type, provider_customer_id]
+              properties:
+                bill_type: { type: string, enum: [ELECTRICITY, WATER, PHONE_TOPUP] }
+                provider_code: { type: string, example: "EVN_HCM" }
+                provider_customer_id: { type: string, example: "PE123456" }
+                topup_amount:
+                  type: number
+                  description: Bắt buộc khi bill_type = PHONE_TOPUP
+                  example: 100000
+      responses:
+        '200':
+          description: Có hóa đơn cần thanh toán
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Bill' }
+        '404': { description: Mã khách hàng không hợp lệ hoặc chưa phát sinh cước kỳ này }
+        '503': { description: Hệ thống nhà cung cấp đang bảo trì }
+
+  /utilities/bills/{bill_id}:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Chi tiết một hóa đơn
+      parameters:
+        - { name: bill_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Bill' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /utilities/catalog/{service_type}:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Tìm kiếm dịch vụ từ đối tác (chuyến bay, khách sạn, suất chiếu phim, sản phẩm TMĐT)
+      parameters:
+        - { name: service_type, in: path, required: true, schema: { type: string, enum: [FLIGHT, HOTEL, MOVIE, ECOMMERCE] } }
+        - { name: q, in: query, schema: { type: string }, description: Từ khóa tìm kiếm }
+        - { name: from, in: query, schema: { type: string }, description: "FLIGHT: mã sân bay đi (SGN)" }
+        - { name: to, in: query, schema: { type: string }, description: "FLIGHT: mã sân bay đến (HAN)" }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: city, in: query, schema: { type: string }, description: "HOTEL/MOVIE: thành phố" }
+        - { name: provider, in: query, schema: { type: string }, description: "Mã đối tác (VNA, VIETJET, CGV, MUONG_THANH, SHOPEE...)" }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CatalogItem' }
+                  total: { type: integer }
+
+  /utilities/movies/{catalog_item_id}/seats:
+    get:
+      tags: [Utilities - Read & Discovery]
+      summary: Truy vấn sơ đồ ghế ngồi (Real-time Seat Map) của suất chiếu phim CGV (UC-U04)
+      parameters:
+        - { name: catalog_item_id, in: path, required: true, schema: { type: string, example: "M_VENOM_3" } }
+        - { name: showtime, in: query, schema: { type: string, default: "19:30" } }
+      responses:
+        '200':
+          description: Sơ đồ ghế ngồi (AVAILABLE, HELD, BOOKED; STANDARD / VIP)
+
+  # ======================= HOLD & ORDERS =======================
+  /utilities/orders/hold:
+    post:
+      tags: [Utilities - Hold & Orders]
+      summary: Giữ chỗ tạm thời 15 phút (Seat/Room Hold) hoặc kiểm tra tồn kho & tính phí ship + Voucher (UC-U03..U06)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_type, catalog_item_id]
+              properties:
+                service_type: { type: string, enum: [FLIGHT, MOVIE, HOTEL, ECOMMERCE] }
+                catalog_item_id: { type: string }
+                quantity: { type: integer, default: 1 }
+                voucher_code: { type: string, example: "GIAM50K" }
+                booking_details: { type: object, additionalProperties: true }
+      responses:
+        '201': { description: Đã tạo đơn hàng tạm thời UTILITY_ORDERS (PENDING) và giữ chỗ 15 phút }
+        '409': { description: Ghế vừa có người đặt trước (Double-booking conflict) hoặc hết phòng / hết hàng tồn kho }
+
+  /utilities/orders:
+    get:
+      tags: [Utilities - Hold & Orders]
+      summary: Danh sách đơn hàng tiện ích đa hình (UTILITY_ORDERS)
+      parameters:
+        - { name: service_type, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [PENDING, PAID, FAILED, EXPIRED, REFUNDED] } }
+      responses:
+        '200':
+          description: OK
+
+  /utilities/bookings:
+    get:
+      tags: [Utilities - Hold & Orders]
+      summary: Danh sách đặt dịch vụ đã hoàn tất của user hiện tại
+      parameters:
+        - { name: service_type, in: query, schema: { type: string, enum: [FLIGHT, HOTEL, MOVIE, ECOMMERCE] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ServiceBooking' } }
+                  total: { type: integer }
+
+  /utilities/bookings/{booking_id}:
+    get:
+      tags: [Utilities - Hold & Orders]
+      summary: Chi tiết một đặt dịch vụ
+      parameters:
+        - { name: booking_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceBooking' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ======================= WRITE (PAYMENTS) =======================
+  /utilities/payments:
+    post:
+      tags: [Utilities - Payment (Write)]
+      summary: Bước 1 - Khởi tạo thanh toán (tạo TRANSACTIONS & UTILITY_ORDERS trạng thái PENDING, sinh OTP)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePaymentRequest' }
+      responses:
+        '201':
+          description: Đã tạo giao dịch PENDING, chờ xác nhận OTP / Sinh trắc học
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentInitResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '402': { description: Không đủ số dư }
+        '409': { description: Hóa đơn đã thanh toán hoặc ghế bị trùng }
+
+  /utilities/payments/{txn_code}/confirm:
+    post:
+      tags: [Utilities - Payment (Write)]
+      summary: Bước 2 - Xác nhận thanh toán sau khi user nhập OTP / sinh trắc học (trừ tiền, gạch nợ/xuất vé, hỗ trợ Auto-Refund)
+      parameters:
+        - { name: txn_code, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                otp_code: { type: string, example: "482913" }
+                biometric_token: { type: string }
+                simulate_partner_error:
+                  type: boolean
+                  description: Giả lập lỗi kết nối đối tác sau khi trừ tiền để kiểm thử cơ chế Auto-Rollback/Refund (UC-U01 8a)
+      responses:
+        '200':
+          description: Kết quả giao dịch thành công kèm mã PNR / QR Code / Booking Voucher / Biên lai
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentResult' }
+        '400': { description: OTP sai hoặc hết hạn }
+        '409': { description: Giao dịch không còn ở trạng thái PENDING hoặc đã hết hạn giữ chỗ 15 phút }
+        '502': { description: Nhà cung cấp lỗi, hệ thống đã tự động hoàn tiền (REFUNDED) }
+
+  /utilities/payments/{txn_code}:
+    get:
+      tags: [Utilities - Payment (Write)]
+      summary: Tra cứu trạng thái giao dịch
+      parameters:
+        - { name: txn_code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /utilities/payments/{txn_code}/cancel:
+    post:
+      tags: [Utilities - Payment (Write)]
+      summary: Hủy giao dịch đang PENDING và giải phóng chỗ giữ tạm thời
+      parameters:
+        - { name: txn_code, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Đã hủy (status = FAILED, không trừ tiền)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentResult' }
+        '409': { description: Giao dịch đã SUCCESS, không thể hủy }
+
+  /webhooks/payment-gateway/{gateway}:
+    post:
+      tags: [Utilities - Payment (Write)]
+      summary: Webhook từ VNPAY / Payoo / Napas / Stripe (server-to-server)
+      security: []
+      parameters:
+        - { name: gateway, in: path, required: true, schema: { type: string, enum: [vnpay, payoo, napas, stripe] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Đã nhận }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized: { description: Thiếu hoặc sai token }
+    NotFound: { description: Không tìm thấy hoặc không thuộc user hiện tại }
+    BadRequest:
+      description: Dữ liệu không hợp lệ
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: { type: string, example: INSUFFICIENT_BALANCE }
+        message: { type: string }
+
+    Bill:
+      type: object
+      properties:
+        bill_id: { type: string }
+        bill_type: { type: string, enum: [ELECTRICITY, WATER, PHONE_TOPUP] }
+        provider_code: { type: string }
+        provider_customer_id: { type: string }
+        customer_name: { type: string }
+        customer_address: { type: string }
+        billing_period: { type: string }
+        amount: { type: number }
+        status: { type: string, enum: [UNPAID, PAID] }
+        transaction_id: { type: string, nullable: true }
+
+    CatalogItem:
+      type: object
+      properties:
+        catalog_item_id: { type: string }
+        service_type: { type: string, enum: [FLIGHT, HOTEL, MOVIE, ECOMMERCE] }
+        provider_code: { type: string }
+        title: { type: string }
+        price: { type: number }
+        currency: { type: string, example: VND }
+        details: { type: object, additionalProperties: true }
+
+    ServiceBooking:
+      type: object
+      properties:
+        booking_id: { type: string }
+        transaction_id: { type: string }
+        service_type: { type: string, enum: [FLIGHT, HOTEL, MOVIE, ECOMMERCE] }
+        booking_details: { type: object, additionalProperties: true }
+        total_amount: { type: number }
+
+    CreatePaymentRequest:
+      type: object
+      required: [source_account_id, txn_type]
+      properties:
+        source_account_id: { type: string }
+        txn_type: { type: string, enum: [BILL, UTILITY] }
+        payment_gateway: { type: string, enum: [NONE, VNPAY, PAYOO, NAPAS, STRIPE], default: NONE }
+        bill_id: { type: string }
+        order_id: { type: string }
+        booking:
+          type: object
+          properties:
+            service_type: { type: string, enum: [FLIGHT, HOTEL, MOVIE, ECOMMERCE] }
+            catalog_item_id: { type: string }
+            total_amount: { type: number }
+            booking_details: { type: object, additionalProperties: true }
+
+    PaymentInitResponse:
+      type: object
+      properties:
+        txn_code: { type: string }
+        order_id: { type: string }
+        status: { type: string, enum: [PENDING] }
+        amount: { type: number }
+        requires_otp: { type: boolean }
+        requires_biometric: { type: boolean }
+        otp_expires_at: { type: string, format: date-time }
+        hold_expires_at: { type: string, format: date-time }
+        gateway_redirect_url: { type: string, nullable: true }
+
+    PaymentResult:
+      type: object
+      properties:
+        txn_code: { type: string }
+        status: { type: string, enum: [PENDING, SUCCESS, FAILED, REFUNDED] }
+        amount: { type: number }
+        txn_type: { type: string }
+        created_at: { type: string, format: date-time }
+        balance_after: { type: number, nullable: true }
+        bill: { $ref: '#/components/schemas/Bill' }
+        booking: { $ref: '#/components/schemas/ServiceBooking' }
+        fulfillment: { type: object, additionalProperties: true }
+        failure_reason: { type: string, nullable: true }

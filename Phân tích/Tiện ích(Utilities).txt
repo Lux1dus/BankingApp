@@ -1,0 +1,106 @@
+1. Kiến trúc Hệ thống & Cơ chế Tích hợp (Technical Architecture)
+Thay vì kết nối trực tiếp với hàng ngàn nhà cung cấp điện nước hay từng hãng hàng không, các ứng dụng (ngân hàng, ví điện tử) thường áp dụng kiến trúc sau:
+
+Sử dụng Hub/Aggregator trung gian: Ứng dụng kết nối thông qua các cổng thanh toán hoặc nhà cung cấp dịch vụ trung gian (như VNPay, Payoo, Napas). Aggregator sẽ chịu trách nhiệm gom nối với các nhà cung cấp dịch vụ cuối (EVN, Sawaco, Vietnam Airlines...).
+
+Giao tiếp qua RESTful API/SOAP: Các request truy vấn dư nợ, kiểm tra vé trống và thanh toán được thực hiện qua API.
+
+Xử lý bất đồng bộ (Asynchronous) & Webhook: Thanh toán các dịch vụ này thường có độ trễ (ví dụ: chờ hệ thống rạp phim xuất vé). Hệ thống áp dụng Webhook để nhận kết quả trả về từ đối tác mà không làm treo (block) giao diện người dùng.
+
+Quản lý giao dịch phân tán: Trong kiến trúc Microservices, để đảm bảo tính toàn vẹn dữ liệu (tiền trong tài khoản đã trừ thì vé phải được xuất), hệ thống phải sử dụng các pattern như Saga hoặc Two-Phase Commit để có cơ chế Rollback (hoàn tiền) nếu hệ thống bên thứ ba gặp lỗi.
+
+Thiết kế Dữ liệu Đa hình (Polymorphic Schema) & Strategy Pattern: Mặc dù các tiện ích có nghiệp vụ khác nhau (mua sắm kiểm tra tồn kho sản phẩm, xem phim kiểm tra sơ đồ ghế trống, điện nước truy vấn nợ cước), hệ thống KHÔNG tạo bảng hay viết lại API thanh toán mới cho từng tiện ích. Thay vào đó, hệ thống chuẩn hóa về 2 thực thể cốt lõi: Danh mục dịch vụ/Đối tác (UtilityService) và Đơn hàng tiện ích (UtilityOrder). Phần thông tin chung (người mua, tổng tiền, trạng thái, mã giao dịch) được lưu thành các cột cố định; phần dữ liệu đặc thù của từng dịch vụ (số ghế, mã chuyến bay, kỳ hóa đơn, địa chỉ giao hàng...) được đóng gói linh hoạt dưới dạng cấu trúc JSON (Metadata/Payload).
+
+
+2. Phân loại và Đặc tả Chi tiết các Nhóm Tiện ích
+Dựa trên đặc thù nghiệp vụ và luồng xử lý, 7 tiện ích trong hệ thống được chia thành 4 nhóm chính:
+
+Nhóm 1: Thanh toán hóa đơn trả sau (Điện, Nước)
+- Đặc thù nghiệp vụ: Truy vấn nợ cước theo kỳ dựa trên mã định danh khách hàng; số tiền thanh toán cố định theo hóa đơn của nhà cung cấp (không cho phép nhập số tiền tùy ý).
+- Dữ liệu đầu vào (Input): Loại dịch vụ (Điện/Nước), Nhà cung cấp (EVN, Sawaco...), Mã khách hàng (provider_customer_id).
+- Quy trình xử lý (Process): Người dùng nhập mã KH -> Hệ thống gọi API sang Aggregator truy vấn hóa đơn chưa thanh toán (UNPAID) -> Hiển thị thông tin (Tên KH, địa chỉ, kỳ cước, tổng tiền) -> Người dùng xác nhận và xác thực giao dịch (OTP/Sinh trắc học) -> Trừ tiền tài khoản và gửi lệnh gạch nợ.
+- Kết quả đầu ra (Output): Biên lai giao dịch thành công, trạng thái hóa đơn chuyển sang PAID, hệ thống lưu lại mã KH để nhắc nhở tự động cho kỳ sau.
+
+Nhóm 2: Viễn thông trả trước/trả sau (Nạp tiền điện thoại)
+- Đặc thù nghiệp vụ: Không cần truy vấn hóa đơn nợ (đối với thuê bao trả trước), người dùng chọn theo các mệnh giá cố định (10.000đ, 20.000đ, 50.000đ, 100.000đ...); yêu cầu xử lý tức thời (Real-time).
+- Dữ liệu đầu vào (Input): Số điện thoại người nhận (mặc định lấy số của chủ tài khoản hoặc chọn từ danh bạ), Nhà mạng (Viettel, VinaPhone, MobiFone - có thể tự động nhận diện qua đầu số), Mệnh giá nạp.
+- Quy trình xử lý (Process): Chọn số điện thoại và mệnh giá -> Kiểm tra số dư tài khoản -> Xác thực giao dịch -> Trừ tiền và gọi API Top-up trực tiếp vào tài khoản SIM thông qua cổng viễn thông.
+- Kết quả đầu ra (Output): Tiền được cộng trực tiếp vào tài khoản điện thoại (hoặc trả về mã thẻ nạp + số seri), lưu lịch sử giao dịch.
+
+Nhóm 3: Đặt chỗ & Mua vé (Vé máy bay, Vé xem phim, Đặt khách sạn)
+- Đặc thù nghiệp vụ: Đòi hỏi truy vấn dữ liệu thời gian thực (Real-time availability) để kiểm tra chỗ trống/phòng trống và áp dụng cơ chế Giữ chỗ tạm thời (Seat/Room Hold/Locking) trong một khoảng thời gian giới hạn (ví dụ: 10 - 15 phút) trong lúc chờ người dùng thanh toán, tránh tình trạng trùng chỗ (Double-booking).
+- Chi tiết từng tiện ích:
+  + Mua vé máy bay:
+    * Input: Điểm đi, điểm đến, ngày đi/ngày về, số lượng hành khách (người lớn, trẻ em), hạng ghế.
+    * Process: Tìm kiếm chuyến bay -> Chọn chuyến bay và hãng hàng không (Vietnam Airlines, Vietjet...) -> Nhập thông tin hành khách (Họ tên, CCCD/Hộ chiếu, ngày sinh, hành lý mua thêm) -> Giữ chỗ tạm thời -> Xác thực & Thanh toán.
+    * Output: Mã đặt chỗ (PNR) và vé điện tử (E-ticket).
+  + Mua vé xem phim:
+    * Input: Rạp chiếu (CGV, Lotte...), tên phim, ngày chiếu, suất chiếu.
+    * Process: Truy vấn sơ đồ ghế (Seat map) theo suất chiếu -> Chọn ghế trống và combo bắp nước -> Khóa ghế tạm thời trên hệ thống rạp -> Xác thực & Thanh toán.
+    * Output: Mã QR Code / Mã đặt vé để quầy rạp quét xuất vé.
+  + Đặt khách sạn:
+    * Input: Địa điểm/Tên khách sạn, ngày nhận phòng (Check-in), ngày trả phòng (Check-out), số lượng phòng và số khách.
+    * Process: Tìm kiếm khách sạn còn phòng -> Chọn loại phòng (Standard, Deluxe...) -> Nhập thông tin người đại diện nhận phòng và yêu cầu đặc biệt -> Giữ phòng -> Xác thực & Thanh toán.
+    * Output: Phiếu xác nhận đặt phòng (Booking Voucher).
+
+Nhóm 4: Thanh toán sản phẩm / Mua sắm trực tuyến (E-commerce)
+- Đặc thù nghiệp vụ: Không cần giữ chỗ theo sơ đồ vị trí như vé phim/máy bay, nhưng cần kiểm tra số lượng tồn kho (Inventory/Stock) của sản phẩm, tính toán phí vận chuyển và quản lý trạng thái giao hàng vật lý.
+- Dữ liệu đầu vào (Input): Danh sách sản phẩm trong giỏ hàng (Mã sản phẩm, phân loại, số lượng, đơn giá), thông tin nhận hàng (Họ tên, số điện thoại, địa chỉ giao hàng), mã giảm giá/voucher (nếu có).
+- Quy trình xử lý (Process): Người dùng chọn sản phẩm trên gian hàng tiện ích (VnShop/E-commerce) -> Kiểm tra tồn kho -> Nhập thông tin giao hàng -> Hệ thống tính tổng tiền (Tiền hàng + Phí ship - Khuyến mãi) -> Xác thực & Trừ tiền tài khoản -> Khấu trừ tồn kho và chuyển đơn sang bộ phận vận chuyển.
+- Kết quả đầu ra (Output): Mã đơn hàng (Order ID), biên lai thanh toán và trạng thái theo dõi đơn hàng (Đang xử lý, Đang giao, Hoàn thành).
+
+3. Luồng Xử lý Chuẩn hóa từ Chọn Dịch vụ đến Thanh toán (Standardized End-to-End Flow)
+Mặc dù chi tiết nghiệp vụ của 4 nhóm trên khác nhau ở bước đầu, toàn bộ các tiện ích đều hội tụ về một luồng xử lý chuẩn gồm 5 bước:
+- Bước 1 (Chọn dịch vụ): Người dùng chọn nhóm tiện ích và nhà cung cấp tương ứng (UtilityService) trên màn hình Utilities Dashboard.
+- Bước 2 (Khởi tạo yêu cầu & Kiểm tra tính khả dụng): Hệ thống truy vấn dữ liệu từ đối tác (kiểm tra nợ cước, ghế trống, phòng trống hoặc tồn kho sản phẩm) và tạo bản ghi đơn hàng tạm thời (UtilityOrder) ở trạng thái PENDING.
+- Bước 3 (Kiểm tra tài chính): Hệ thống kiểm tra trạng thái tài khoản nguồn (ACCOUNTS), số dư khả dụng và hạn mức giao dịch trong ngày.
+- Bước 4 (Xác thực bảo mật): Yêu cầu người dùng xác nhận qua mã OTP (2FA) hoặc Sinh trắc học (Biometric) đối với giao dịch có giá trị cao.
+- Bước 5 (Thanh toán & Đồng bộ kết quả): Hệ thống trừ tiền tài khoản, ghi nhận vào bảng TRANSACTIONS, đồng thời gửi lệnh xác nhận sang cổng trung gian (Aggregator) để gạch nợ/xuất vé/tạo đơn hàng và trả biên lai cho người dùng.
+
+4. Phân tích Giá trị và Lợi ích
+Đối với Người dùng cuối (User):
+
+Tính tiện lợi "All-in-one": Không cần cài đặt hàng chục ứng dụng khác nhau cho từng nhu cầu. Mọi thao tác từ nạp thẻ, đóng tiền điện đến đặt vé du lịch đều nằm trong một giao diện duy nhất.
+
+Tự động hóa & Nhắc nhở: Ứng dụng lưu lại mã khách hàng và tự động nhắc nhở khi đến kỳ thanh toán hóa đơn, giúp người dùng tránh bị cắt dịch vụ do quên.
+
+Tối ưu tài chính: Dễ dàng áp dụng các mã giảm giá (voucher) và quản lý, thống kê luồng tiền chi tiêu hàng tháng ngay trên một nền tảng.
+
+Đối với Ứng dụng/Ngân hàng (System Owner):
+
+Tăng mức độ gắn kết (User Retention): Các nhu cầu thanh toán điện/nước/điện thoại diễn ra hàng tháng, ép buộc người dùng phải mở ứng dụng thường xuyên, từ đó tăng DAU/MAU (Daily/Monthly Active Users).
+
+Khai thác dữ liệu (Big Data): Thấu hiểu thói quen chi tiêu của khách hàng (hay đi du lịch, mức tiêu thụ điện năng lớn, thích xem phim). Từ đó, ứng dụng có thể "Cross-sell" (bán chéo) các sản phẩm tài chính như thẻ tín dụng du lịch, vay tiêu dùng.
+
+Doanh thu từ phí hoa hồng: Mỗi giao dịch thanh toán thành công, ứng dụng sẽ nhận được một phần chiết khấu từ nhà cung cấp dịch vụ hoặc cổng trung gian.
+
+Đối với Đối tác cung cấp dịch vụ (Merchants):
+
+Tiếp cận ngay lập tức với tệp khách hàng khổng lồ có sẵn tiền trong tài khoản (đã qua eKYC).
+
+Giảm chi phí thu ngân, in ấn hóa đơn giấy và quản lý tiền mặt.
+
+5. Trải nghiệm Người dùng (UX) Đặc trưng
+Để các tiện ích này thực sự hiệu quả, luồng UX/UI phải được thiết kế tối ưu:
+
+Luồng thanh toán một chạm (One-click checkout): Lấy trực tiếp nguồn tiền từ tài khoản/thẻ đang liên kết mà không cần người dùng nhập lại thông tin thẻ.
+
+Lưu trữ Context: Lưu danh bạ số điện thoại thường nạp, mã hóa đơn điện/nước, thông tin hành khách mua vé máy bay để tự động điền (Auto-fill) cho những lần sau.
+
+Hiển thị trực quan: Các dịch vụ thiết yếu (Điện, Nước, Viễn thông) thường được đưa lên màn hình Home, trong khi các dịch vụ giải trí (Vé phim, Khách sạn, Mua sắm) được gom vào mục "Tiện ích/Khám phá".
+
+6. Thách thức và Quản trị Rủi ro
+Đồng bộ trạng thái giao dịch: Đây là thách thức kỹ thuật lớn nhất. Lỗi thường xảy ra khi: Tài khoản khách hàng đã trừ tiền -> Mạng lỗi -> Đối tác không nhận được thông báo thanh toán -> Không xuất dịch vụ. Hệ thống cần có cơ chế đối soát tự động (Auto-Reconciliation) và luồng xử lý hoàn tiền (Refund) minh bạch để tránh phàn nàn từ khách hàng.
+
+Bảo mật: Việc chia sẻ dữ liệu với bên thứ ba yêu cầu mã hóa đường truyền mạnh mẽ (TLS 1.3), sử dụng các cơ chế xác thực như OAuth2, chữ ký số (Digital Signature) trên payload API để chống giả mạo giao dịch.
+
+Phụ thuộc SLA của bên thứ 3: Nếu hệ thống của điện lực hay hãng hàng không bảo trì, tính năng trên ứng dụng cũng bị "chết theo". Ứng dụng cần có cơ chế Fallback, hiển thị thông báo bảo trì thân thiện thay vì văng lỗi kỹ thuật ra màn hình.
+
+
+
+Dịch vụ điện nước: https://cskh.evnhcmc.vn/thanhtoantructuyen/
+Dịch vụ nạp tiền điện thoại: Viettel và Vinnaphone
+Mua vé máy bay: Vietnam airlines, vietjet air.
+Mua vé xem phim: CGV
+Khách sạn: Mường thanh
+Thanh toán sản phẩm: cho phép người dùng liên kết ngân hàng với các nền tảng giao dịch trực tuyến như shoppee, lazada và amazon.(một trong 3)

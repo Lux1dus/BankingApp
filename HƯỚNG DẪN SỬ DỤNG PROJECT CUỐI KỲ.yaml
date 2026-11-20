@@ -1,0 +1,13 @@
+HƯỚNG DẪN SỬ DỤNG PROJECT CUỐI KỲ
+
+1. Cài đặt server:
+-Nếu muốn test trên local thì thực hiện các bước:
+B1: tải docker về rồi đăng nhập
+B2: vào powershell cd tới thư mục Bankserver rồi chạy docker compose -d --build để build dự án
+-Nếu muốn test trên cloud:
+chưa cập nhật lên cloud có j tui cập nhật sau:))))
+2. Sử dụng app:
+B1: container server phải đang chạy app mới có dữ liệu mà truy vấn
+B2: vào file UtilitiesApiClient rồi đổi địa chỉ "http://10.0.2.2:3030/v1" sang địa chỉ của server đang chạy
+
+Mọi thắc mắc vui lòng liên lạc qua zalo:)))

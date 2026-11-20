@@ -1,0 +1,20 @@
+const data = {
+                "partnerRefId": "AB123",
+                "telco": "viettel",
+                "telcoServiceType": "prepaid",
+                "phoneNumber": "0866123456",
+                "productCode": "viettel_10",
+                "signature": "5a2774918a29cf4d2bdb78cccceb956f4c27837fad09a03a56e1df68b1bf29dd"
+        };
+
+fetch('https://gateway.dev.appotapay.com/api/v2/service/topup/charging', {
+    method: 'POST',
+    headers: {
+        'X-APPOTAPAY-AUTH': 'JWT_TOKEN',
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+})
+.then(response => response.json())
+.then(data => console.log(data))
+.catch(error => console.error('Error:', error));

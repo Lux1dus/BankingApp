@@ -1,0 +1,170 @@
+openapi: 3.0.3
+info:
+  title: Banking App - Navigation API
+  version: 1.0.0
+  description: |
+    API cung cấp dữ liệu định vị các chi nhánh ngân hàng & ATM (`BANK_BRANCHES`), tìm kiếm chi nhánh gần nhất theo Haversine (UC-N02) và đề xuất đường đi bộ / xe máy / ô tô / xe buýt (UC-N03).
+servers:
+  - url: https://api.example.com/v1
+
+tags:
+  - name: Navigation
+
+paths:
+  /navigation/branches:
+    get:
+      tags: [Navigation]
+      summary: Lấy danh sách tất cả các chi nhánh ngân hàng & ATM
+      description: Dùng để Android load toàn bộ marker lên Google Maps. Hỗ trợ tìm kiếm theo từ khóa và lọc theo loại điểm (BRANCH / ATM / BOTH).
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: "Tìm theo tên hoặc địa chỉ" }
+        - { name: type, in: query, schema: { type: string, enum: [BRANCH, ATM, BOTH] }, description: "Lọc theo Chi nhánh hoặc Cây ATM" }
+        - { name: status, in: query, schema: { type: string, enum: [OPEN, CLOSED, MAINTENANCE] } }
+      responses:
+        '200':
+          description: Danh sách chi nhánh / ATM
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Branch' }
+                  total: { type: integer }
+
+  /navigation/nearby:
+    get:
+      tags: [Navigation]
+      summary: Lấy các chi nhánh / ATM gần vị trí của User nhất & Đề xuất lộ trình đi bộ mặc định (UC-N02)
+      description: |
+        - Back-end sử dụng công thức Haversine trong SQL để lọc ra các chi nhánh trong bán kính cho trước.
+        - Nếu không có chi nhánh trong bán kính tìm kiếm gần, tự động mở rộng bán kính (`radius_expanded: true`).
+        - Đánh dấu chi nhánh gần nhất (`is_nearest: true`) và trả kèm lộ trình đi bộ mặc định (`walking_route_to_nearest`).
+      parameters:
+        - { name: lat, in: query, required: false, schema: { type: number, format: float } }
+        - { name: lng, in: query, required: false, schema: { type: number, format: float } }
+        - { name: fallback_city, in: query, schema: { type: string, enum: [HCM, HAN] }, description: "Dùng khi người dùng từ chối cấp quyền GPS (UC-N01 3a)" }
+        - { name: radius_km, in: query, schema: { type: number, default: 10 } }
+        - { name: limit, in: query, schema: { type: integer, default: 5 } }
+        - { name: type, in: query, schema: { type: string, enum: [BRANCH, ATM, BOTH] } }
+      responses:
+        '200':
+          description: Danh sách chi nhánh gần nhất kèm khoảng cách đường chim bay và lộ trình đi bộ đề xuất
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_location:
+                    type: object
+                    properties:
+                      latitude: { type: number }
+                      longitude: { type: number }
+                      is_fallback: { type: boolean }
+                  radius_km: { type: number }
+                  radius_expanded: { type: boolean }
+                  nearest_branch: { $ref: '#/components/schemas/NearbyBranch' }
+                  walking_route_to_nearest: { $ref: '#/components/schemas/RouteResponse' }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/NearbyBranch' }
+
+  /navigation/directions:
+    get:
+      tags: [Navigation]
+      summary: Đề xuất và vẽ đường đi đến chi nhánh theo phương tiện (UC-N03)
+      description: |
+        - Mặc định ưu tiên đường đi bộ (`mode=walking`) đến chi nhánh gần nhất, hỗ trợ chuyển đổi linh hoạt giữa `walking`, `two_wheeler`, `driving`, `transit`.
+        - Có bộ nhớ đệm (Route Cache) chống spam API khi người dùng chuyển qua lại giữa các phương tiện.
+        - Trả về `overview_polyline.points` chuẩn Google Polyline, `decoded_path`, `bounds` (`LatLngBounds`), `steps` và `summary` (ETA, Distance).
+      parameters:
+        - { name: origin_lat, in: query, required: true, schema: { type: number, format: float } }
+        - { name: origin_lng, in: query, required: true, schema: { type: number, format: float } }
+        - { name: branch_id, in: query, required: false, schema: { type: string }, description: "Mã chi nhánh đích (nếu bỏ trống sẽ tự động chọn chi nhánh gần nhất)" }
+        - { name: dest_lat, in: query, required: false, schema: { type: number, format: float } }
+        - { name: dest_lng, in: query, required: false, schema: { type: number, format: float } }
+        - { name: mode, in: query, schema: { type: string, enum: [walking, two_wheeler, driving, transit], default: walking } }
+      responses:
+        '200':
+          description: Chi tiết lộ trình di chuyển
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RouteResponse' }
+
+components:
+  schemas:
+    Branch:
+      type: object
+      properties:
+        branch_id: { type: string }
+        name: { type: string }
+        branch_type: { type: string, enum: [BRANCH, ATM, BOTH] }
+        address: { type: string }
+        latitude: { type: number, format: float }
+        longitude: { type: number, format: float }
+        opening_hours: { type: string }
+        status: { type: string, enum: [OPEN, CLOSED, MAINTENANCE] }
+
+    NearbyBranch:
+      allOf:
+        - $ref: '#/components/schemas/Branch'
+        - type: object
+          properties:
+            distance_km: { type: number, description: "Khoảng cách đường chim bay (km)" }
+            distance_meters: { type: integer }
+            is_nearest: { type: boolean }
+            recommended_mode: { type: string, enum: [walking, two_wheeler] }
+            estimated_walking_minutes: { type: integer }
+
+    RouteResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [OK, ZERO_RESULTS] }
+        mode: { type: string, enum: [walking, two_wheeler, driving, transit] }
+        mode_label: { type: string }
+        cached: { type: boolean }
+        summary:
+          type: object
+          properties:
+            distance_meters: { type: integer }
+            distance_km: { type: number }
+            distance_text: { type: string }
+            duration_seconds: { type: integer }
+            duration_minutes: { type: integer }
+            duration_text: { type: string }
+            polyline_color: { type: string }
+            polyline_style: { type: string }
+        bounds:
+          type: object
+          properties:
+            northeast:
+              type: object
+              properties:
+                latitude: { type: number }
+                longitude: { type: number }
+            southwest:
+              type: object
+              properties:
+                latitude: { type: number }
+                longitude: { type: number }
+        overview_polyline:
+          type: object
+          properties:
+            points: { type: string }
+        decoded_path:
+          type: array
+          items:
+            type: object
+            properties:
+              latitude: { type: number }
+              longitude: { type: number }
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              step_number: { type: integer }
+              instruction: { type: string }
+              distance_text: { type: string }
+              duration_text: { type: string }

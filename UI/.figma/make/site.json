@@ -1,0 +1,10 @@
+{
+  "description": "Manage everyday banking with a mobile-friendly dashboard and quick-access utilities in drawers, popovers, collapsible panels, and bottom sheets.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

@@ -1,0 +1,69 @@
+### 1. Luồng 1: Lấy vị trí người dùng (User Location Tracking)
+
+**Cơ chế hoạt động:**
+
+* Hệ thống không gọi trực tiếp phần cứng GPS vì sẽ gây hao pin và chậm. Thay vào đó, trên môi trường Android, chuẩn mực là sử dụng **FusedLocationProviderClient**. Công cụ này kết hợp dữ liệu từ GPS, Wi-Fi và mạng di động (Cellular) để tính toán vị trí (vĩ độ - lat, kinh độ - lng) một cách tối ưu nhất về năng lượng và độ chính xác.
+
+**Xử lý ngoại lệ (Edge Cases) - Rất quan trọng cho UX:**
+
+* **Quyền truy cập (Permissions):** Ứng dụng phải xin quyền `ACCESS_FINE_LOCATION` (chính xác) và `ACCESS_COARSE_LOCATION` (tương đối). Nếu người dùng từ chối (Deny), hệ thống cần có luồng fallback: hiển thị thanh tìm kiếm để người dùng tự nhập địa chỉ, hoặc mặc định hiển thị trung tâm thành phố.
+* **Thiết bị tắt GPS:** Nếu quyền đã cấp nhưng GPS trên máy bị tắt, ứng dụng cần gọi API kiểm tra trạng thái và hiển thị hộp thoại (Dialog) yêu cầu người dùng bật Location Services.
+
+### 2. Luồng 2: Tìm và hiển thị chi nhánh ngân hàng gần đó
+
+**Kiến trúc Dữ liệu & Xử lý (Backend vs. Mobile):**
+
+* **Lưu trữ:** Thông tin các chi nhánh (Tên, Địa chỉ, Lat, Lng, Giờ mở cửa) phải được lưu trữ trong Database của hệ thống (ví dụ: PostgreSQL kết hợp PostGIS để hỗ trợ truy vấn không gian - Spatial Queries).
+* **Tính toán khoảng cách:** Khi Mobile App gửi tọa độ của người dùng lên Backend qua RESTful API, Backend sẽ sử dụng công thức Haversine (tính khoảng cách đường chim bay trên mặt cầu) hoặc các hàm spatial query (như `ST_Distance`) để quét và trả về danh sách 5-10 chi nhánh gần nhất. Việc này giúp giảm tải payload gửi về client.
+
+**Tích hợp UI (Google Maps SDK):**
+
+* Sử dụng **Google Maps SDK** để nhúng bản đồ vào Fragment/Activity.
+* Duyệt qua danh sách chi nhánh trả về từ Backend và gắn các **Marker** (Điểm đánh dấu) lên bản đồ.
+* Nếu người dùng zoom out (thu nhỏ bản đồ) và có quá nhiều chi nhánh trùng lấp, cần áp dụng thuật toán **Marker Clustering** để gom nhóm các icon lại, tránh gây giật lag UI và rối mắt.
+
+
+###3.Luồng 3 : Đề xuất đường đi theo phương tiện người dùng chọn
+
+**1. Thay đổi về Giao diện (UI/UX - Frontend)**
+
+* **Thành phần UI:** Bổ sung một thanh chọn phương tiện (thường dùng Material Choice Chips hoặc Bottom Navigation/Tab) ngay trên giao diện bản đồ. Các tùy chọn tiêu chuẩn bao gồm: Ô tô (Car), Xe máy (Motorbike), Đi bộ (Walk), và Xe buýt (Transit).
+* **Trạng thái mặc định:** Hệ thống nên tự động chọn một phương tiện mặc định dựa trên khoảng cách. Ví dụ: Dưới 1km thì chọn mặc định là Đi bộ; trên 1km thì chọn Xe máy/Ô tô.
+
+**2. Tích hợp Google Maps Directions API (Cơ chế Dynamic Mode)**
+Thay vì hardcode `mode=walking`, Mobile App sẽ truyền một tham số biến động (`selectedMode`) vào HTTP Request.
+
+* **Thiết lập tham số `mode`:**
+* `mode=driving`: Dành cho Ô tô (sẽ tuân thủ nghiêm ngặt đường 1 chiều, cấm rẽ đối với ô tô).
+* `mode=two_wheeler`: Dành cho Xe máy (rất phù hợp tại Việt Nam, tối ưu các hẻm nhỏ hoặc đường cho phép xe máy đi 2 chiều).
+* `mode=walking`: Dành cho Đi bộ (tối ưu vỉa hè, cầu vượt đi bộ).
+* `mode=transit`: Dành cho phương tiện công cộng (trả về chi tiết tuyến xe buýt cần bắt).
+
+
+* **Cấu trúc Request:** `[https://maps.googleapis.com/maps/api/directions/json?origin=](https://maps.googleapis.com/maps/api/directions/json?origin=){lat,lng}&destination={lat,lng}&mode={selectedMode}&key={API_KEY}`
+
+**3. Xử lý Logic Code trên Android (Java/Kotlin)**
+Khi người dùng bấm đổi phương tiện (ví dụ: đang từ Ô tô chuyển sang Xe máy), ứng dụng cần thực hiện chuỗi hành động sau:
+
+* **Clear đường cũ:** Phải gọi hàm `remove()` trên đối tượng Polyline cũ đang vẽ trên bản đồ để xóa nó đi, tránh tình trạng nhiều đường kẻ đè lên nhau gây rối mắt.
+* **Fetch data mới:** Gửi request mới tới Directions API với `mode` tương ứng.
+* **Render lại bản đồ:**
+* Giải mã (Decode) chuỗi `overview_polyline` mới thành list các `LatLng`.
+* Vẽ lại đường đi bằng `PolylineOptions`. Bạn có thể thay đổi màu sắc đường vẽ tùy theo phương tiện (VD: Xanh dương cho ô tô, Xanh lá cho đi bộ) để tăng trải nghiệm thị giác.
+* Cập nhật lại Textview hiển thị **Thời gian (ETA)** và **Khoảng cách (Distance)**. (Lưu ý: Quãng đường của ô tô có thể dài hơn xe máy do phải vòng qua các đường một chiều).
+* Dùng `LatLngBounds.Builder` để tự động zoom và đưa toàn bộ tuyến đường mới vào vừa vặn trong khung hình màn hình.
+
+
+
+**4. Tối ưu hóa và Quản trị rủi ro**
+
+* **Debounce Click (Chống spam API):** Người dùng có thể bấm liên tục qua lại giữa các phương tiện để xem giá trị thay đổi. Việc này sẽ làm hệ thống gọi Directions API liên tục, gây tốn kém chi phí (Cost). Developer cần áp dụng kỹ thuật Debounce (chờ khoảng 500ms - 1s sau lần click cuối cùng mới thực sự gọi API) hoặc cache (lưu lại) kết quả của phương tiện đã gọi trước đó trong cùng một phiên.
+* **Xử lý lỗi không tìm thấy đường:** Với chế độ `transit` (xe buýt), nếu chi nhánh ngân hàng nằm ở khu vực không có tuyến xe, API sẽ trả về status `ZERO_RESULTS`. App cần bắt lỗi (catch) trạng thái này và hiển thị Toast/Dialog báo "Không tìm thấy tuyến xe công cộng phù hợp", thay vì để trống bản đồ hoặc crash app.
+
+### 4. Quản trị Rủi ro và Tối ưu hóa Hệ thống
+
+Để hệ thống hoạt động ổn định và tối ưu chi phí, một kỹ sư phát triển cần lưu ý các điểm sau:
+
+* **Bảo mật API Key:** API Key của Google Maps (đặc biệt là Directions API có tính phí) tuyệt đối không được để lộ. Cần thiết lập hạn chế (Restrictions) trên Google Cloud Console, chỉ cho phép các request xuất phát từ SHA-1 certificate và Package Name cụ thể của ứng dụng Android.
+* **Tối ưu Chi phí API (Cost Optimization):** Không tự động gọi Directions API cho *tất cả* các chi nhánh hiển thị trên màn hình. Chỉ nên tính khoảng cách đường chim bay miễn phí. Khi người dùng chủ động bấm vào một chi nhánh cụ thể và chọn "Chỉ đường" (Get Directions), hệ thống mới kích hoạt Directions API.
+* **Quản lý vòng đời (Lifecycle) và Pin:** Phải ngắt kết nối (remove location updates) ngay khi Activity/Fragment chứa bản đồ bị ẩn (chuyển sang background) để tránh việc ứng dụng ngầm "hút" pin của thiết bị do liên tục truy vấn GPS.

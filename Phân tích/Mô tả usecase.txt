@@ -1,0 +1,319 @@
+================================================================================
+MÔ TẢ CHI TIẾT USE CASE (UTILITIES, NAVIGATION & AI CHATBOT)
+================================================================================
+
+Tổng quan Tác nhân (Actors):
+- Tác nhân chính (Primary Actor): Người dùng / Khách hàng (User) - Chủ tài khoản ngân hàng đã đăng nhập ứng dụng.
+- Tác nhân phụ / Hệ thống ngoài (Secondary Actors):
+  + Cổng thanh toán / Nhà cung cấp dịch vụ (Payment Aggregator / Providers: EVN, Sawaco, Viettel, VinaPhone, Vietnam Airlines, Vietjet Air, CGV, Mường Thanh, Sàn TMĐT Shopee/Lazada/Amazon).
+  + Hệ thống Định vị & Bản đồ (FusedLocationProvider, Google Maps SDK, Google Directions API).
+  + Hệ thống AI / NLP Engine (LLM / RAG / Dialogflow).
+
+================================================================================
+PHẦN 1: NHÓM TIỆN ÍCH (UTILITIES)
+================================================================================
+
+--------------------------------------------------------------------------------
+UC-U01: Thanh toán hóa đơn Điện / Nước (Bill Payment)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Cho phép người dùng truy vấn dư nợ cước điện/nước theo kỳ dựa trên mã khách hàng và thực hiện thanh toán gạch nợ trực tiếp từ tài khoản ngân hàng.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Cổng trung gian thanh toán (Aggregator) & Nhà cung cấp (EVN, Sawaco...).
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã đăng nhập vào ứng dụng ngân hàng.
+- Tài khoản nguồn đang hoạt động (ACTIVE) và có đủ số dư khả dụng.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Trên màn hình Utilities Dashboard, người dùng chọn dịch vụ "Thanh toán Điện" hoặc "Thanh toán Nước".
+- Bước 2: Người dùng chọn Nhà cung cấp dịch vụ (VD: EVNHCMC, Sawaco) và nhập Mã khách hàng (hoặc chọn từ danh sách mã đã lưu).
+- Bước 3: Hệ thống gửi yêu cầu qua API sang cổng trung gian (Aggregator) để truy vấn hóa đơn chưa thanh toán (UNPAID).
+- Bước 4: Hệ thống hiển thị chi tiết hóa đơn: Tên khách hàng, địa chỉ, kỳ cước, tổng số tiền cố định cần thanh toán và tạo bản ghi đơn hàng tạm thời (UtilityOrder) ở trạng thái PENDING.
+- Bước 5: Người dùng kiểm tra thông tin và nhấn "Xác nhận thanh toán".
+- Bước 6: Hệ thống kiểm tra số dư tài khoản nguồn, hạn mức giao dịch và yêu cầu xác thực bảo mật (nhập mã OTP / Smart OTP hoặc Sinh trắc học).
+- Bước 7: Người dùng hoàn tất xác thực bảo mật.
+- Bước 8: Hệ thống trừ tiền trong tài khoản, ghi nhận lịch sử giao dịch (TRANSACTIONS), gửi lệnh gạch nợ sang đối tác và cập nhật trạng thái đơn hàng thành PAID.
+
+5. Luồng rẽ nhánh / Ngoại lệ (Alternative / Exception Flows):
+- 3a. Mã khách hàng không tồn tại hoặc không có nợ cước: Hệ thống hiển thị thông báo "Mã khách hàng không hợp lệ hoặc chưa phát sinh cước kỳ này".
+- 6a. Số dư tài khoản không đủ: Hệ thống báo lỗi số dư không đủ và gợi ý nạp thêm tiền.
+- 8a. Lỗi kết nối với đối tác sau khi đã trừ tiền: Hệ thống chuyển giao dịch sang trạng thái chờ đối soát và kích hoạt cơ chế hoàn tiền tự động (Rollback/Refund) nếu gạch nợ thất bại.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Hóa đơn điện/nước được gạch nợ thành công trên hệ thống nhà cung cấp (trạng thái PAID).
+- Tài khoản người dùng bị trừ đúng số tiền hóa đơn; phát sinh biên lai giao dịch điện tử.
+- Mã khách hàng được lưu lại để tự động điền và nhắc nhở thanh toán cho kỳ cước tiếp theo.
+
+--------------------------------------------------------------------------------
+UC-U02: Nạp tiền điện thoại (Mobile Top-up)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Cho phép người dùng nạp tiền trực tiếp (Top-up) vào tài khoản SIM trả trước/trả sau theo mệnh giá cố định với thời gian thực (Real-time).
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Cổng viễn thông (Viettel, VinaPhone, MobiFone...).
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã đăng nhập ứng dụng và có tài khoản nguồn đủ số dư.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng chọn tiện ích "Nạp tiền điện thoại" trên Utilities Dashboard.
+- Bước 2: Người dùng nhập số điện thoại cần nạp (mặc định tự điền số của chủ tài khoản hoặc chọn từ danh bạ).
+- Bước 3: Hệ thống tự động nhận diện nhà mạng (Viettel, VinaPhone...) dựa trên đầu số và hiển thị danh sách các mệnh giá cố định (10.000đ, 20.000đ, 50.000đ, 100.000đ, 200.000đ, 500.000đ).
+- Bước 4: Người dùng chọn mệnh giá nạp và nhấn "Thanh toán".
+- Bước 5: Hệ thống khởi tạo đơn hàng tiện ích (UtilityOrder), kiểm tra số dư tài khoản và yêu cầu xác thực giao dịch (OTP/Sinh trắc học).
+- Bước 6: Người dùng xác thực giao dịch thành công.
+- Bước 7: Hệ thống trừ tiền tài khoản, gọi API Top-up trực tiếp sang cổng viễn thông để cộng tiền vào SIM.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 2a. Số điện thoại không đúng định dạng: Hệ thống cảnh báo lỗi định dạng ngay trên màn hình.
+- 7a. Hệ thống nhà mạng bảo trì: Hệ thống hoàn tiền (Rollback) ngay lập tức vào tài khoản người dùng và thông báo nhà mạng đang bảo trì.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Tài khoản điện thoại của người nhận được cộng tiền ngay lập tức (Real-time).
+- Hiển thị biên lai nạp tiền thành công và lưu lịch sử giao dịch cũng như số điện thoại gần đây.
+
+--------------------------------------------------------------------------------
+UC-U03: Đặt mua vé máy bay (Flight Booking)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Cho phép người dùng tìm kiếm chuyến bay theo thời gian thực, chọn chuyến, nhập thông tin hành khách, giữ chỗ tạm thời và thanh toán xuất vé điện tử.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Hệ thống hãng hàng không / Aggregator (Vietnam Airlines, Vietjet Air...).
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã đăng nhập và có tài khoản đủ số dư thanh toán.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng chọn tiện ích "Mua vé máy bay" trên Utilities Dashboard.
+- Bước 2: Người dùng nhập thông tin hành trình: Điểm đi, điểm đến, ngày đi/ngày về, số lượng hành khách (người lớn, trẻ em) và hạng ghế, sau đó bấm "Tìm chuyến bay".
+- Bước 3: Hệ thống gọi API truy vấn dữ liệu thời gian thực và hiển thị danh sách các chuyến bay khả dụng kèm giá vé.
+- Bước 4: Người dùng chọn chuyến bay phù hợp và nhập thông tin hành khách (Họ tên, CCCD/Hộ chiếu, ngày sinh, gói hành lý mua thêm).
+- Bước 5: Hệ thống gửi lệnh Giữ chỗ tạm thời (Seat Hold/Locking) trong thời gian giới hạn (10-15 phút) và tạo bản ghi UtilityOrder (kèm JSON metadata hành trình) ở trạng thái PENDING.
+- Bước 6: Hệ thống kiểm tra số dư tài khoản và yêu cầu xác thực bảo mật (OTP/Sinh trắc học).
+- Bước 7: Người dùng xác thực thành công; hệ thống trừ tiền tài khoản và gọi API xác nhận xuất vé sang đối tác hàng không.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 5a. Hết ghế trống ở thời điểm bấm đặt: Hệ thống thông báo hạng vé vừa hết và yêu cầu chọn chuyến bay/hạng ghế khác.
+- 7a. Quá thời gian giữ chỗ (Timeout 15 phút) mà chưa thanh toán: Hệ thống tự động hủy giữ chỗ và chuyển trạng thái đơn hàng sang EXPIRED.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Đơn hàng chuyển sang trạng thái PAID; người dùng nhận được Mã đặt chỗ (PNR) và Vé điện tử (E-ticket) ngay trên ứng dụng và qua email/SMS.
+- Thông tin hành khách được lưu vào Context để tự động điền cho các lần đặt sau.
+
+--------------------------------------------------------------------------------
+UC-U04: Đặt mua vé xem phim (Movie Ticket Booking)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Cho phép người dùng chọn rạp, phim, suất chiếu, chọn ghế trực quan trên sơ đồ ghế (Seat map) và thanh toán để nhận mã vé xem phim.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Hệ thống rạp chiếu phim (CGV...).
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã đăng nhập ứng dụng và có số dư khả dụng đủ thanh toán.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng chọn tiện ích "Mua vé xem phim" trên Utilities Dashboard.
+- Bước 2: Người dùng chọn cụm rạp (VD: CGV), tên bộ phim, ngày chiếu và suất chiếu mong muốn.
+- Bước 3: Hệ thống gọi API truy vấn và hiển thị sơ đồ ghế ngồi (Seat map) theo thời gian thực của suất chiếu đó (phân biệt ghế trống, ghế đã đặt, ghế VIP/Standard).
+- Bước 4: Người dùng chọn vị trí ghế trống trên sơ đồ và chọn thêm combo bắp nước (nếu có).
+- Bước 5: Hệ thống thực hiện khóa ghế tạm thời (Seat Locking) trên hệ thống rạp và tạo đơn hàng UtilityOrder ở trạng thái PENDING.
+- Bước 6: Hệ thống kiểm tra tài khoản nguồn và yêu cầu người dùng xác thực giao dịch (OTP/Sinh trắc học).
+- Bước 7: Người dùng hoàn tất xác thực; hệ thống trừ tiền tài khoản và gửi lệnh xuất vé sang hệ thống rạp phim.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 5a. Ghế vừa bị người khác chọn trước (Double-booking conflict): Hệ thống báo ghế đã có người giữ và làm mới (refresh) lại sơ đồ ghế.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Ghế ngồi được xác nhận đặt thành công; hệ thống trả về Mã đặt vé và QR Code để người dùng quét lấy vé trực tiếp tại quầy rạp.
+
+--------------------------------------------------------------------------------
+UC-U05: Đặt phòng khách sạn (Hotel Booking)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Cho phép người dùng tìm kiếm khách sạn còn phòng theo địa điểm và thời gian lưu trú, chọn hạng phòng, giữ phòng và thanh toán trực tuyến.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Hệ thống đối tác khách sạn (Mường Thanh...).
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã đăng nhập và có tài khoản nguồn đủ số dư.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng chọn tiện ích "Đặt khách sạn" trên Utilities Dashboard.
+- Bước 2: Người dùng nhập địa điểm hoặc tên khách sạn (VD: Mường Thanh), ngày nhận phòng (Check-in), ngày trả phòng (Check-out), số lượng phòng và số khách.
+- Bước 3: Hệ thống truy vấn dữ liệu đối tác và hiển thị danh sách khách sạn cùng các hạng phòng còn trống (Standard, Deluxe...).
+- Bước 4: Người dùng chọn loại phòng, nhập thông tin người đại diện nhận phòng và các yêu cầu đặc biệt (nếu có).
+- Bước 5: Hệ thống gửi lệnh giữ phòng tạm thời (Room Hold), tạo bản ghi UtilityOrder (lưu thông tin ngày check-in/out vào JSON Metadata) ở trạng thái PENDING.
+- Bước 6: Hệ thống kiểm tra tài chính và yêu cầu người dùng xác thực bảo mật (OTP/Sinh trắc học).
+- Bước 7: Người dùng xác thực thành công; hệ thống trừ tiền tài khoản và đồng bộ lệnh đặt phòng sang đối tác khách sạn.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 3a. Không còn phòng trống trong khoảng ngày đã chọn: Hệ thống thông báo hết phòng và gợi ý thay đổi ngày lưu trú hoặc khách sạn lân cận.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Phòng khách sạn được đặt thành công; hệ thống trả về Phiếu xác nhận đặt phòng (Booking Voucher) và lưu vào mục quản lý đơn hàng tiện ích.
+
+--------------------------------------------------------------------------------
+UC-U06: Thanh toán sản phẩm / Liên kết mua sắm trực tuyến (E-commerce Payment)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Cho phép người dùng mua sắm sản phẩm trên gian hàng tiện ích hoặc thanh toán đơn hàng liên kết với các sàn thương mại điện tử (Shopee, Lazada, Amazon), kiểm tra tồn kho và theo dõi vận chuyển.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Hệ thống Sàn TMĐT / Gian hàng đối tác (Shopee, Lazada, Amazon / VnShop).
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã đăng nhập ứng dụng, tài khoản đang hoạt động và đủ số dư.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng truy cập mục "Thanh toán sản phẩm / Mua sắm" trên ứng dụng hoặc chọn thanh toán qua tài khoản ngân hàng liên kết từ nền tảng TMĐT (Shopee/Lazada/Amazon).
+- Bước 2: Người dùng chọn sản phẩm, phân loại, số lượng, nhập địa chỉ nhận hàng và áp dụng mã giảm giá/voucher (nếu có).
+- Bước 3: Hệ thống kiểm tra số lượng tồn kho (Inventory/Stock) của sản phẩm, tính tổng tiền thanh toán (Tiền hàng + Phí vận chuyển - Khuyến mãi) và khởi tạo UtilityOrder ở trạng thái PENDING.
+- Bước 4: Hệ thống kiểm tra số dư khả dụng, hạn mức giao dịch và yêu cầu xác thực bảo mật (OTP/Sinh trắc học).
+- Bước 5: Người dùng xác thực giao dịch thành công.
+- Bước 6: Hệ thống trừ tiền tài khoản, ghi nhận giao dịch, gửi lệnh khấu trừ tồn kho và chuyển thông tin đơn hàng sang bộ phận vận chuyển của đối tác.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 3a. Sản phẩm hết hàng (Out of stock): Hệ thống thông báo sản phẩm không đủ tồn kho và yêu cầu điều chỉnh lại giỏ hàng.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Giao dịch thanh toán hoàn tất (PAID); tồn kho sản phẩm được khấu trừ.
+- Người dùng nhận được Mã đơn hàng (Order ID), biên lai thanh toán và có thể theo dõi trạng thái vận chuyển (Đang xử lý, Đang giao, Hoàn thành).
+
+
+================================================================================
+PHẦN 2: NHÓM ĐIỀU HƯỚNG & BẢN ĐỒ (NAVIGATION)
+================================================================================
+
+--------------------------------------------------------------------------------
+UC-N01: Lấy vị trí hiện tại của người dùng (Get User Location)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Hệ thống xin quyền truy cập vị trí và sử dụng FusedLocationProviderClient để xác định tọa độ (Kinh độ, Vĩ độ) hiện tại của người dùng một cách tối ưu pin và độ chính xác.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Hệ điều hành thiết bị & Dịch vụ định vị (FusedLocationProviderClient / GPS / Wi-Fi / Cellular).
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng mở tính năng "Bản đồ / Chi nhánh & ATM gần đây" trên ứng dụng.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng truy cập vào màn hình Bản đồ chi nhánh (Map/Nearby Branches).
+- Bước 2: Ứng dụng kiểm tra quyền truy cập vị trí (`ACCESS_FINE_LOCATION` và `ACCESS_COARSE_LOCATION`). Nếu chưa có, hệ thống hiển thị hộp thoại xin cấp quyền.
+- Bước 3: Người dùng chấp thuận cấp quyền truy cập vị trí và bật dịch vụ GPS trên thiết bị.
+- Bước 4: Ứng dụng gọi `FusedLocationProviderClient` kết hợp tín hiệu GPS, Wi-Fi và mạng di động để lấy tọa độ hiện tại (`lat`, `lng`).
+- Bước 5: Hệ thống di chuyển camera bản đồ đến vị trí hiện tại của người dùng và hiển thị chấm xanh đánh dấu vị trí.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 3a. Người dùng từ chối cấp quyền (Deny Permission): Hệ thống kích hoạt luồng Fallback, hiển thị thanh tìm kiếm để người dùng tự nhập địa chỉ thủ công và mặc định đưa bản đồ về trung tâm thành phố.
+- 3b. Thiết bị đang tắt GPS: Ứng dụng kiểm tra trạng thái Location Services và hiển thị hộp thoại (Dialog) nhắc người dùng bật GPS.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Hệ thống thu thập được tọa độ (`lat`, `lng`) chính xác của người dùng.
+- Vị trí của người dùng được hiển thị trực quan trên bản đồ, sẵn sàng làm điểm xuất phát (origin) để tìm chi nhánh và chỉ đường.
+
+--------------------------------------------------------------------------------
+UC-N02: Tìm và hiển thị chi nhánh ngân hàng / ATM gần đó (View Nearby Branches)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Dựa trên tọa độ của người dùng, hệ thống truy vấn không gian (Spatial Query / Haversine) để tìm các chi nhánh ngân hàng/ATM gần nhất và gắn điểm đánh dấu (Marker) lên bản đồ Google Maps.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Google Maps SDK, Backend Database (BankBranch).
+
+3. Tiền điều kiện (Pre-conditions):
+- Đã có tọa độ vị trí của người dùng (từ UC-N01) hoặc vị trí vùng tâm bản đồ.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Ứng dụng gửi tọa độ (`lat`, `lng`) hiện tại của người dùng lên Backend qua RESTful API.
+- Bước 2: Backend sử dụng công thức Haversine (hoặc hàm truy vấn không gian `ST_Distance` trong PostGIS) quét bảng `BankBranch` để lọc ra danh sách 5 - 10 chi nhánh/ATM gần nhất.
+- Bước 3: Backend trả về danh sách chi nhánh gồm: Tên chi nhánh, Địa chỉ, Tọa độ (`lat`, `lng`), Giờ mở cửa và Khoảng cách ước tính.
+- Bước 4: Ứng dụng sử dụng Google Maps SDK duyệt qua danh sách và gắn các điểm đánh dấu (Marker) lên bản đồ; nếu thu nhỏ bản đồ có nhiều điểm trùng lấp, hệ thống tự động gom cụm (Marker Clustering).
+- Bước 5: Người dùng chạm vào một Marker hoặc xem danh sách bên dưới để xem thông tin chi tiết của chi nhánh đó.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 2a. Không có chi nhánh nào trong bán kính tìm kiếm gần: Hệ thống tự động mở rộng bán kính tìm kiếm hoặc hiển thị chi nhánh gần nhất tiếp theo kèm thông báo khoảng cách.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Bản đồ hiển thị trực quan các Marker đánh dấu chi nhánh/ATM xung quanh người dùng.
+- Người dùng nắm được tên, địa chỉ, trạng thái giờ mở cửa và khoảng cách đến từng chi nhánh.
+
+--------------------------------------------------------------------------------
+UC-N03: Đề xuất và vẽ đường đi đến chi nhánh (Get Route Directions)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Đề xuất lộ trình di chuyển tối ưu từ vị trí người dùng đến chi nhánh ngân hàng đã chọn (mặc định ưu tiên đường đi bộ khi ở gần, hỗ trợ chuyển đổi linh hoạt giữa Đi bộ, Xe máy, Ô tô, Xe buýt) thông qua Google Directions API.
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: Google Maps Directions API.
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã xác định được vị trí hiện tại và danh sách chi nhánh ngân hàng gần đó đã hiển thị trên bản đồ.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng chọn một chi nhánh ngân hàng trên bản đồ (hoặc chọn đề xuất chi nhánh gần nhất) và nhấn nút "Chỉ đường" (Get Directions).
+- Bước 2: Hệ thống tự động chọn phương tiện mặc định dựa trên khoảng cách (ví dụ: tự động chọn Đi bộ `mode=walking` cho chi nhánh gần dưới 1km, hoặc người dùng chủ động chọn tab Đi bộ / Xe máy `two_wheeler` / Ô tô `driving` / Xe buýt `transit` trên thanh công cụ).
+- Bước 3: Ứng dụng xóa đường vẽ cũ trên bản đồ (nếu có) và gửi HTTP Request đến Google Maps Directions API với tọa độ điểm đi (`origin`), tọa độ chi nhánh (`destination`) và phương tiện (`mode`).
+- Bước 4: Hệ thống nhận chuỗi `overview_polyline` từ API trả về, giải mã (decode) thành danh sách các tọa độ `LatLng`.
+- Bước 5: Ứng dụng vẽ tuyến đường (`PolylineOptions`) lên bản đồ với màu sắc trực quan, tự động căn chỉnh khung hình (`LatLngBounds`) bao trọn lộ trình và hiển thị tổng khoảng cách (Distance) cùng thời gian di chuyển dự kiến (ETA).
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 2a. Người dùng bấm chuyển đổi liên tục giữa các phương tiện: Hệ thống áp dụng cơ chế chống spam API (Debounce 500ms - 1s) và lấy dữ liệu từ bộ nhớ đệm (Cache) nếu lộ trình của phương tiện đó đã được tải trước đó trong phiên.
+- 4a. Không tìm thấy tuyến đường (Status `ZERO_RESULTS`, thường gặp khi chọn xe buýt ở khu vực không có tuyến): Hệ thống hiển thị thông báo "Không tìm thấy tuyến đường phù hợp cho phương tiện này" và gợi ý chuyển sang Đi bộ hoặc Xe máy.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Tuyến đường đi bộ (hoặc theo phương tiện đã chọn) đến chi nhánh gần nhất được vẽ rõ ràng, chính xác trên bản đồ.
+- Hiển thị đầy đủ khoảng cách (m/km) và thời gian di chuyển dự kiến (phút), giúp người dùng dễ dàng di chuyển đến chi nhánh.
+
+
+================================================================================
+PHẦN 3: NHÓM TRỢ LÝ ẢO THÔNG MINH (AI CHATBOT)
+================================================================================
+
+--------------------------------------------------------------------------------
+UC-C01: Đặt câu hỏi, nhận câu trả lời và điều hướng thông minh (Ask AI Chatbot & Deep Link Navigation)
+--------------------------------------------------------------------------------
+1. Mô tả ngắn gọn:
+Tiếp nhận câu hỏi của người dùng bằng ngôn ngữ tự nhiên (văn bản hoặc giọng nói), phân tích ý định (Intent) và thực thể (Entity) để trả lời chính xác, đồng thời cung cấp nút điều hướng (Deep Link Action) đưa người dùng đến đúng màn hình chức năng với dữ liệu đã được điền sẵn (Auto-fill).
+
+2. Tác nhân:
+- Chính: Người dùng (Khách hàng).
+- Phụ: AI Chatbot Engine (NLP / LLM / RAG), Backend Database.
+
+3. Tiền điều kiện (Pre-conditions):
+- Người dùng đã đăng nhập ứng dụng và mở giao diện trò chuyện với AI Chatbot.
+
+4. Luồng sự kiện chính (Basic Flow):
+- Bước 1: Người dùng nhập câu hỏi dạng văn bản (Text), sử dụng giọng nói (Speech-to-Text) hoặc chạm vào các thẻ gợi ý nhanh (Suggestion Chips) trên màn hình Chatbot (VD: *"Thanh toán tiền điện tháng này giúp tôi"*, *"Đặt vé máy bay đi Hà Nội cuối tuần này"*, hoặc *"Chi nhánh nào gần đây nhất?"*).
+- Bước 2: Ứng dụng gửi nội dung tin nhắn (`ChatMessage`) lên Backend và hiển thị hiệu ứng chờ ("Đang gõ..." - Typing Indicator).
+- Bước 3: Hệ thống Backend qua lớp lọc bảo mật (chống Prompt Injection & ẩn danh dữ liệu nhạy cảm PII) chuyển câu hỏi tới AI/NLP Engine để bóc tách:
+  + Ý định (Intent): Ví dụ `Pay_Utility_Bill`, `Book_Flight`, `Find_Nearest_Branch`, `Transfer_Money`...
+  + Thực thể (Entity): Loại dịch vụ, mã khách hàng, điểm đến, ngày đi, phương tiện di chuyển, số tiền...
+- Bước 4: Backend truy xuất dữ liệu ngữ cảnh liên quan (như hóa đơn điện chưa thanh toán, danh sách chuyến bay, hoặc tọa độ chi nhánh gần nhất) và đóng gói phản hồi dưới dạng JSON bao gồm: Câu trả lời tự nhiên (`message`) và Lệnh điều hướng (`ChatbotAction`: `type`, `destination` Deep Link, `params`).
+- Bước 5: Ứng dụng hiển thị tin nhắn trả lời của Chatbot kèm theo Thẻ/Nút hành động (CTA Action Button / Rich Media Card) ngay bên dưới tin nhắn.
+- Bước 6: Người dùng nhấn vào Nút hành động (CTA Button) trên khung chat.
+- Bước 7: Ứng dụng kích hoạt cơ chế Deep Link (`NavController` / `Intent`), điều hướng trực tiếp đến màn hình chức năng tương ứng (VD: `app://utilities/bill-payment`, `app://booking/flights`, `app://navigation/branch-map`) và truyền kèm `Bundle params` để tự động điền sẵn (Auto-fill) toàn bộ thông tin trên màn hình đích.
+
+5. Luồng rẽ nhánh / Ngoại lệ:
+- 3a. Câu hỏi nằm ngoài phạm vi hiểu biết hoặc không rõ ý định (Fallback): Chatbot không báo lỗi cứng nhắc mà phản hồi lịch sự (*"Xin lỗi, em chưa rõ ý anh/chị. Anh/chị muốn thao tác về Tài khoản, Tiện ích hay Tìm đường?"*) kèm theo các Suggestion Chips để hướng dẫn lại.
+- 3b. Câu hỏi chỉ mang tính tra cứu thông tin thuần túy (VD: hỏi lãi suất, hướng dẫn sử dụng): Chatbot trả lời trực tiếp bằng văn bản dựa trên kho tri thức ngân hàng (RAG) mà không cần gắn kèm nút điều hướng giao dịch.
+- 7a. Đảm bảo an toàn bảo mật giao dịch: Chatbot tuyệt đối chỉ dừng lại ở bước chuẩn bị dữ liệu và mở màn hình (Maker); người dùng bắt buộc phải tự kiểm tra và xác thực bằng OTP/Sinh trắc học (Checker) tại màn hình chức năng mới hoàn tất giao dịch.
+
+6. Kết quả mong đợi (Expected Results / Post-conditions):
+- Lịch sử phiên trò chuyện (`ChatbotSession`) và tin nhắn (`ChatMessage`, `ChatbotAction`) được lưu trữ đầy đủ.
+- Người dùng nhận được câu trả lời nhanh chóng, chính xác theo ngữ cảnh cá nhân hóa.
+- Khi bấm vào đường dẫn điều hướng, ứng dụng mở đúng màn hình chức năng (Tiện ích, Đặt vé, Chuyển tiền hoặc Bản đồ chi nhánh) với các trường thông tin đã được điền sẵn (Auto-fill) hoặc tự động vẽ sẵn đường đi, giúp rút ngắn tối đa các bước thao tác thủ công.

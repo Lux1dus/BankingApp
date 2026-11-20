@@ -1,0 +1,10 @@
+☐  Phân tích các tiện ích: thanh toán điện, nước; nạp tiền điện thoại; mua vé máy bay, vé xem phim; đặt khách sạn và thanh toán sản phẩm.
+☐  Phân tích chức năng Navigation: lấy vị trí người dùng, hiển thị chi nhánh ngân hàng gần đó và đề xuất đường đi bộ đến chi nhánh gần nhất.
+☐  Phân tích chức năng AI Chatbot: nhận câu hỏi, trả lời và cung cấp đường dẫn đến màn hình chức năng tương ứng.
+☐  Liệt kê và mô tả Use Case cho từng nhóm Utilities, Navigation và Chatbot; ghi rõ luồng chính và kết quả mong đợi.
+☐  Vẽ Use Case Diagram cho Utilities, Navigation và AI Chatbot.
+☐  Phác thảo UI/UX cho Utilities Dashboard, các màn hình thanh toán/đặt dịch vụ, Map/Nearby Branches và Chatbot.
+☐  Vẽ Class Diagram cho UtilityService, UtilityOrder, BankBranch, MapService, ChatbotService, ChatMessage và ChatbotAction.
+☐  Vẽ ERD phần Services: Utility Services, Utility Orders, Bank Branches, Chatbot Sessions và Chat Messages.
+☐  Vẽ Solution/Sequence Diagram mô tả tích hợp Maps, AI Chatbot và luồng chọn dịch vụ đến bước thanh toán.
+☐  Liệt kê API/dịch vụ ngoài dự kiến sử dụng và phân biệt rõ chức năng nào dùng dữ liệu mẫu, chức năng nào dự kiến tích hợp thật.
